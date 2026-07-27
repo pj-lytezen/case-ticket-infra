@@ -63,9 +63,9 @@ function Ensure-KeyVault {
   # If this fails due to directory permissions, do it manually in the portal:
   #   Key Vault -> Access control (IAM) -> Add role assignment -> Key Vault Secrets Officer
   try {
-    $principalId = (Invoke-Expression "az ad signed-in-user show --query id -o tsv").Trim()
+    $principalId = (Invoke-Az "ad signed-in-user show --query id -o tsv").Trim()
     $scope = $kv.id
-    Invoke-Expression "az role assignment create --assignee-object-id $principalId --assignee-principal-type User --role \"Key Vault Secrets Officer\" --scope $scope | Out-Null" | Out-Null
+    Invoke-Az "role assignment create --assignee-object-id $principalId --assignee-principal-type User --role \"Key Vault Secrets Officer\" --scope $scope" | Out-Null
     Write-Host "Assigned Key Vault Secrets Officer to current user."
   } catch {
     Write-Host "WARNING: Could not auto-assign Key Vault role. You may need to assign it manually."
@@ -83,13 +83,14 @@ function New-RandomPassword {
 function Ensure-Secret {
   param([string]$SecretName,[string]$SecretValue)
   try {
-    Invoke-Expression "az keyvault secret show --vault-name $keyVaultName -n $SecretName | Out-Null" | Out-Null
+    Invoke-Az "keyvault secret show --vault-name $keyVaultName -n $SecretName" | Out-Null
     Write-Host "Secret exists: $SecretName"
     return
   } catch { }
 
   Write-Host "Creating secret: $SecretName"
-  Invoke-Expression "az keyvault secret set --vault-name $keyVaultName -n $SecretName --value `"$SecretValue`" | Out-Null" | Out-Null
+  $escaped = $SecretValue -replace "'", "''"
+  Invoke-Az "keyvault secret set --vault-name $keyVaultName -n $SecretName --value '$escaped'" | Out-Null
 }
 
 $law = Ensure-LogAnalytics

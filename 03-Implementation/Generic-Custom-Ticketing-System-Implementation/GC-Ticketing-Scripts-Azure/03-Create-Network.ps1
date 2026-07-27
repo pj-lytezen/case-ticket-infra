@@ -94,21 +94,23 @@ try {
   }
 
   Write-Host "Creating NAT Gateway: $natName"
-  $nat = Invoke-AzJson "network nat gateway create -g $rg -n $natName --public-ip-addresses $pipName --idle-timeout 10 --tags Project=SupportTicketAutomation Prefix=$Prefix"
-  $nat = $nat.natGateway
+  $nat = Invoke-AzJson "network nat gateway create -g $rg -n $natName --public-ip-addresses $pipName --idle-timeout 10"
+  if ($nat.PSObject.Properties.Match('natGateway').Count -gt 0) {
+    $nat = $nat.natGateway
+  }
+  Ensure-Tag -ResourceId $nat.id -Tags @{ Project = "SupportTicketAutomation"; Prefix = $Prefix }
 }
 
 # Associate NAT to private subnets that need outbound connectivity.
 foreach ($snet in @("snet-app","snet-aks","snet-data","snet-pe")) {
   $s = Invoke-AzJson "network vnet subnet show -g $rg --vnet-name $vnetName -n $snet"
-  if ($s.natGateway -and $s.natGateway.id) {
+  if ($s.PSObject.Properties.Match('natGateway').Count -gt 0 -and $s.natGateway -and $s.natGateway.id) {
     Write-Host "NAT already associated to $snet"
     continue
   }
   Write-Host "Associating NAT to subnet: $snet"
-  Invoke-Expression "az network vnet subnet update -g $rg --vnet-name $vnetName -n $snet --nat-gateway $natName | Out-Null" | Out-Null
+  Invoke-Az "network vnet subnet update -g $rg --vnet-name $vnetName -n $snet --nat-gateway $natName" | Out-Null
 }
 
 Write-Host "Network foundation complete."
 Write-Host "Next: 04-Validate-Network.ps1"
-

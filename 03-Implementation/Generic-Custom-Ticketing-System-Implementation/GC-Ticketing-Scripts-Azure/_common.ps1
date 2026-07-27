@@ -21,14 +21,23 @@ function Assert-CommandExists {
 
 function Invoke-AzJson {
   param([Parameter(Mandatory=$true)][string]$Command)
-  $raw = Invoke-Expression "az $Command -o json"
+  $raw = Invoke-Az "$Command -o json"
   if (-not $raw) { return $null }
   return $raw | ConvertFrom-Json
 }
 
+function Invoke-Az {
+  param([Parameter(Mandatory=$true)][string]$Command)
+  $raw = Invoke-Expression "az $Command"
+  if ($LASTEXITCODE -ne 0) {
+    throw "Azure CLI command failed (exit $LASTEXITCODE): az $Command"
+  }
+  return $raw
+}
+
 function Get-AzSubscriptionId {
   # Returns the current active subscription id (GUID) as a string.
-  (Invoke-Expression "az account show --query id -o tsv").Trim()
+  (Invoke-Az "account show --query id -o tsv").Trim()
 }
 
 function Get-DeterministicSuffix {
@@ -60,18 +69,18 @@ function Get-ResourceGroupName {
 
 function Ensure-ResourceGroup {
   param([string]$Name,[string]$Location)
-  $exists = (Invoke-Expression "az group exists --name $Name") | ConvertFrom-Json
+  $exists = (Invoke-Az "group exists --name $Name") | ConvertFrom-Json
   if ($exists -eq $true) {
     Write-Host "Resource group exists: $Name"
     return
   }
   Write-Host "Creating resource group: $Name ($Location)"
-  Invoke-Expression "az group create --name $Name --location $Location --tags Project=SupportTicketAutomation" | Out-Null
+  Invoke-Az "group create --name $Name --location $Location --tags Project=SupportTicketAutomation" | Out-Null
 }
 
 function Ensure-Tag {
   param([string]$ResourceId,[hashtable]$Tags)
   # Azure supports tagging most resources; updating tags is idempotent.
   $tagArgs = $Tags.Keys | ForEach-Object { "$_=$($Tags[$_])" }
-  Invoke-Expression "az resource tag --ids $ResourceId --tags $($tagArgs -join ' ')" | Out-Null
+  Invoke-Az "resource tag --ids $ResourceId --tags $($tagArgs -join ' ')" | Out-Null
 }

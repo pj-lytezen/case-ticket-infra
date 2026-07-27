@@ -28,7 +28,7 @@ $kv = Invoke-AzJson "keyvault show -g $rg -n $keyVaultName"
 Write-Host "Key Vault OK: $($kv.name) id=$($kv.id)"
 
 foreach ($s in @("pg-admin-user","pg-admin-password","app-config-json")) {
-  Invoke-Expression "az keyvault secret show --vault-name $keyVaultName -n $s --query id -o tsv" | Out-Null
+  Invoke-Az "keyvault secret show --vault-name $keyVaultName -n $s --query id -o tsv" | Out-Null
   Write-Host "Secret OK: $s"
 }
 

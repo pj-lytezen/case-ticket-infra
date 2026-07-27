@@ -2,7 +2,7 @@ param(
   [string]$Prefix = "gc-tkt-prod",
   [string]$Location = "eastus",
   [int]$CoreNodeCount = 3,
-  [string]$CoreNodeVmSize = "Standard_D2s_v5",
+  [string]$CoreNodeVmSize = "Standard_D2s_v3",
   [string]$AcrName = ""
 )
 
@@ -42,15 +42,15 @@ try {
   Write-Host "ACR exists: $acrName"
 } catch {
   Write-Host "Creating ACR: $acrName"
-  Invoke-Expression "az acr create -g $rg -n $acrName --sku Standard --admin-enabled false --tags Project=SupportTicketAutomation Prefix=$Prefix | Out-Null" | Out-Null
+  Invoke-Az "acr create -g $rg -n $acrName --sku Standard --admin-enabled false --tags Project=SupportTicketAutomation Prefix=$Prefix" | Out-Null
 }
 
 # AKS subnet id
-$aksSubnetId = (Invoke-Expression "az network vnet subnet show -g $rg --vnet-name $vnetName -n $aksSubnetName --query id -o tsv").Trim()
+$aksSubnetId = (Invoke-Az "network vnet subnet show -g $rg --vnet-name $vnetName -n $aksSubnetName --query id -o tsv").Trim()
 if (-not $aksSubnetId) { throw "Missing AKS subnet. Run 03-Create-Network.ps1 first." }
 
 # Log Analytics workspace id (for monitoring addon)
-$lawId = (Invoke-Expression "az monitor log-analytics workspace show -g $rg -n $lawName --query id -o tsv").Trim()
+$lawId = (Invoke-Az "monitor log-analytics workspace show -g $rg -n $lawName --query id -o tsv").Trim()
 
 try {
   $aks = Invoke-AzJson "aks show -g $rg -n $aksName"
@@ -58,39 +58,42 @@ try {
 } catch {
   Write-Host "Creating AKS cluster: $aksName"
 
-  Invoke-Expression @"
-az aks create -g $rg -n $aksName -l $Location `
-  --enable-managed-identity `
-  --node-count $CoreNodeCount `
-  --node-vm-size $CoreNodeVmSize `
-  --enable-cluster-autoscaler --min-count 2 --max-count 4 `
-  --network-plugin azure `
-  --vnet-subnet-id $aksSubnetId `
-  --attach-acr $acrName `
-  --enable-addons monitoring `
-  --workspace-resource-id $lawId `
-  --tags Project=SupportTicketAutomation Prefix=$Prefix | Out-Null
-"@ | Out-Null
+  $createCmd = @(
+    "aks create -g $rg -n $aksName -l $Location",
+    "--enable-managed-identity",
+    "--node-count $CoreNodeCount",
+    "--node-vm-size $CoreNodeVmSize",
+    "--enable-cluster-autoscaler --min-count 2 --max-count 4",
+    "--network-plugin azure",
+    "--vnet-subnet-id $aksSubnetId",
+    "--attach-acr $acrName",
+    "--enable-addons monitoring",
+    "--workspace-resource-id $lawId",
+    "--generate-ssh-keys",
+    "--tags Project=SupportTicketAutomation Prefix=$Prefix"
+  ) -join " "
+  Invoke-Az $createCmd | Out-Null
 }
 
 # Spot node pool for workers (idempotent: check if exists)
 $poolName = "workers"
 $exists = $false
 try {
-  Invoke-Expression "az aks nodepool show -g $rg --cluster-name $aksName -n $poolName | Out-Null" | Out-Null
+  Invoke-Az "aks nodepool show -g $rg --cluster-name $aksName -n $poolName" | Out-Null
   $exists = $true
 } catch { }
 
 if (-not $exists) {
   Write-Host "Adding spot nodepool: $poolName"
-  Invoke-Expression @"
-az aks nodepool add -g $rg --cluster-name $aksName -n $poolName `
-  --node-count 1 `
-  --enable-cluster-autoscaler --min-count 0 --max-count 5 `
-  --priority Spot --eviction-policy Delete --spot-max-price -1 `
-  --node-vm-size $CoreNodeVmSize `
-  --labels role=workers env=prod | Out-Null
-"@ | Out-Null
+  $poolCmd = @(
+    "aks nodepool add -g $rg --cluster-name $aksName -n $poolName",
+    "--node-count 1",
+    "--enable-cluster-autoscaler --min-count 0 --max-count 5",
+    "--priority Spot --eviction-policy Delete --spot-max-price -1",
+    "--node-vm-size $CoreNodeVmSize",
+    "--labels role=workers env=prod"
+  ) -join " "
+  Invoke-Az $poolCmd | Out-Null
 } else {
   Write-Host "Nodepool exists: $poolName"
 }

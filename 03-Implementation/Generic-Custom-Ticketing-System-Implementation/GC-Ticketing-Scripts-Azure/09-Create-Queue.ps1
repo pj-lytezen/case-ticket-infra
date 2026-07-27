@@ -43,7 +43,7 @@ try {
   Write-Host "Queue exists: $queueName"
 } catch {
   Write-Host "Creating queue: $queueName"
-  Invoke-Expression "az servicebus queue create -g $rg --namespace-name $nsName -n $queueName --max-delivery-count 5 --enable-dead-lettering-on-message-expiration true | Out-Null" | Out-Null
+  Invoke-Az "servicebus queue create -g $rg --namespace-name $nsName -n $queueName --max-delivery-count 5 --enable-dead-lettering-on-message-expiration true" | Out-Null
 }
 
 Write-Host "Queueing complete."

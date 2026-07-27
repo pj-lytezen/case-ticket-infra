@@ -42,32 +42,32 @@ $pgName = if ($PostgresServerName) { $PostgresServerName } else { $defaultPg }
 
 $defaultKv = To-GlobalName -Base ("kv$Prefix$suffix") -MaxLen 24
 $keyVaultName = if ($KeyVaultName) { $KeyVaultName } else { $defaultKv }
-$adminUser = (Invoke-Expression "az keyvault secret show --vault-name $keyVaultName -n pg-admin-user --query value -o tsv").Trim()
-$adminPass = (Invoke-Expression "az keyvault secret show --vault-name $keyVaultName -n pg-admin-password --query value -o tsv").Trim()
+$adminUser = (Invoke-Az "keyvault secret show --vault-name $keyVaultName -n pg-admin-user --query value -o tsv").Trim()
+$adminPass = (Invoke-Az "keyvault secret show --vault-name $keyVaultName -n pg-admin-password --query value -o tsv").Trim()
 
 # Private DNS zone
 $dnsZone = "privatelink.postgres.database.azure.com"
 try {
-  Invoke-Expression "az network private-dns zone show -g $rg -n $dnsZone | Out-Null" | Out-Null
+  Invoke-Az "network private-dns zone show -g $rg -n $dnsZone" | Out-Null
   Write-Host "Private DNS zone exists: $dnsZone"
 } catch {
   Write-Host "Creating private DNS zone: $dnsZone"
-  Invoke-Expression "az network private-dns zone create -g $rg -n $dnsZone | Out-Null" | Out-Null
+  Invoke-Az "network private-dns zone create -g $rg -n $dnsZone" | Out-Null
 }
-$dnsZoneId = (Invoke-Expression "az network private-dns zone show -g $rg -n $dnsZone --query id -o tsv").Trim()
+$dnsZoneId = (Invoke-Az "network private-dns zone show -g $rg -n $dnsZone --query id -o tsv").Trim()
 
 # Link the zone to the VNet (required so private Postgres DNS resolves inside the VNet).
 $linkName = "link-$Prefix-pg"
-$vnetId = (Invoke-Expression "az network vnet show -g $rg -n $vnetName --query id -o tsv").Trim()
+$vnetId = (Invoke-Az "network vnet show -g $rg -n $vnetName --query id -o tsv").Trim()
 try {
-  Invoke-Expression "az network private-dns link vnet show -g $rg -z $dnsZone -n $linkName | Out-Null" | Out-Null
+  Invoke-Az "network private-dns link vnet show -g $rg -z $dnsZone -n $linkName" | Out-Null
   Write-Host "DNS link exists: $linkName"
 } catch {
   Write-Host "Creating DNS link: $linkName"
-  Invoke-Expression "az network private-dns link vnet create -g $rg -z $dnsZone -n $linkName -v $vnetId -e false | Out-Null" | Out-Null
+  Invoke-Az "network private-dns link vnet create -g $rg -z $dnsZone -n $linkName -v $vnetId -e false" | Out-Null
 }
 
-$pgSubnetId = (Invoke-Expression "az network vnet subnet show -g $rg --vnet-name $vnetName -n $pgSubnetName --query id -o tsv").Trim()
+$pgSubnetId = (Invoke-Az "network vnet subnet show -g $rg --vnet-name $vnetName -n $pgSubnetName --query id -o tsv").Trim()
 if (-not $pgSubnetId) { throw "Missing delegated subnet $pgSubnetName. Run 03-Create-Network.ps1." }
 
 try {
@@ -81,15 +81,15 @@ try {
   # - deployed into delegated subnet
   # - private DNS zone used for name resolution
   try {
-    Invoke-Expression @"
-az postgres flexible-server create -g $rg -n $pgName -l $Location `
-  --tier $Tier --sku-name $SkuName --storage-size $StorageGb `
-  --admin-user $adminUser --admin-password `"$adminPass`" `
-  --public-access none `
-  --subnet $pgSubnetId `
-  --private-dns-zone $dnsZoneId `
-  --tags Project=SupportTicketAutomation Prefix=$Prefix | Out-Null
-"@ | Out-Null
+    $createCmd = @(
+      "postgres flexible-server create -g $rg -n $pgName -l $Location",
+      "--tier $Tier --sku-name $SkuName --storage-size $StorageGb",
+      "--admin-user $adminUser --admin-password `"$adminPass`"",
+      "--subnet $pgSubnetId",
+      "--private-dns-zone $dnsZoneId",
+      "--tags Project=SupportTicketAutomation Prefix=$Prefix"
+    ) -join " "
+    Invoke-Az $createCmd | Out-Null
   } catch {
     Write-Host "ERROR: Postgres creation failed."
     Write-Host "Azure CLI flags for private access can vary by CLI version."
@@ -102,11 +102,11 @@ az postgres flexible-server create -g $rg -n $pgName -l $Location `
 # Ensure the application database exists.
 $dbName = "gc_ticketing"
 try {
-  Invoke-Expression "az postgres flexible-server db show -g $rg -s $pgName -d $dbName | Out-Null" | Out-Null
+  Invoke-Az "postgres flexible-server db show -g $rg -s $pgName -d $dbName" | Out-Null
   Write-Host "Database exists: $dbName"
 } catch {
   Write-Host "Creating database: $dbName"
-  Invoke-Expression "az postgres flexible-server db create -g $rg -s $pgName -d $dbName | Out-Null" | Out-Null
+  Invoke-Az "postgres flexible-server db create -g $rg -s $pgName -d $dbName" | Out-Null
 }
 
 Write-Host "Postgres provisioning complete."

@@ -37,19 +37,19 @@ try {
   Write-Host "Storage account exists: $storageName"
 } catch {
   Write-Host "Creating storage account: $storageName ($Sku)"
-  Invoke-Expression "az storage account create -g $rg -n $storageName -l $Location --kind StorageV2 --sku $Sku --min-tls-version TLS1_2 --https-only true --allow-blob-public-access false --tags Project=SupportTicketAutomation Prefix=$Prefix | Out-Null" | Out-Null
+  Invoke-Az "storage account create -g $rg -n $storageName -l $Location --kind StorageV2 --sku $Sku --min-tls-version TLS1_2 --https-only true --allow-blob-public-access false --tags Project=SupportTicketAutomation Prefix=$Prefix" | Out-Null
 }
 
 # Create containers (requires an auth mode; simplest is login-based).
 foreach ($c in @("docs","attachments","audit")) {
   $exists = $false
   try {
-    $exists = (Invoke-Expression "az storage container exists --account-name $storageName -n $c --auth-mode login --query exists -o tsv").Trim() -eq "true"
+    $exists = (Invoke-Az "storage container exists --account-name $storageName -n $c --auth-mode login --query exists -o tsv").Trim() -eq "true"
   } catch { }
 
   if (-not $exists) {
     Write-Host "Creating container: $c"
-    Invoke-Expression "az storage container create --account-name $storageName -n $c --auth-mode login | Out-Null" | Out-Null
+    Invoke-Az "storage container create --account-name $storageName -n $c --auth-mode login" | Out-Null
   } else {
     Write-Host "Container exists: $c"
   }

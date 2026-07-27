@@ -26,6 +26,6 @@ $st = Invoke-AzJson "storage account show -g $rg -n $storageName"
 Write-Host "Storage OK: $($st.name) sku=$($st.sku.name)"
 
 foreach ($c in @("docs","attachments","audit")) {
-  $exists = (Invoke-Expression "az storage container exists --account-name $storageName -n $c --auth-mode login --query exists -o tsv").Trim()
+  $exists = (Invoke-Az "storage container exists --account-name $storageName -n $c --auth-mode login --query exists -o tsv").Trim()
   Write-Host "Container $c exists=$exists"
 }
